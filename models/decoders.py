@@ -28,8 +28,9 @@ class EfficientNetV2b0(nn.Module):
             self.stages[-1].apply(dilation2)
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"1": "0",
                                                                               "2": "1",
-                                                                              "5": "2", })
-            self.out_channels = [32, 48, 192]
+                                                                              "4": "2",
+                                                                              "5": "3", })
+            self.out_channels = [32, 48, 112, 192]
         elif output_stride == 32:
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"1": "0",
                                                                               "2": "1",
@@ -62,8 +63,9 @@ class Xception(nn.Module):
             self.stages[-2].apply(dilation2)
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"0": "0",
                                                                               "1": "1",
-                                                                              "20": "2", })
-            self.out_channels = [128, 256, 2048]
+                                                                              "18": "2",
+                                                                              "20": "3", })
+            self.out_channels = [128, 256, 728, 2048]
         elif output_stride == 32:
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"0": "0",
                                                                               "1": "1",
@@ -95,8 +97,10 @@ class MobileNetV3(nn.Module):
             self.stages[-1].apply(dilation2)
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"1": "0",
                                                                               "2": "1",
-                                                                              "5": "2", })
-            self.out_channels = [24, 40, 160]
+                                                                              "4": "2",
+                                                                              "5": "3", })
+            self.out_channels = [24, 40, 112, 160]
+
         elif output_stride == 32:
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"1": "0",
                                                                               "2": "1",
@@ -128,8 +132,9 @@ class CspDarkNetM(nn.Module):
             self.stages[-1].apply(dilation2)
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"0": "0",
                                                                               "1": "1",
-                                                                              "3": "2", })
-            self.out_channels = [86, 192, 768]
+                                                                              "2": "2",
+                                                                              "3": "3", })
+            self.out_channels = [86, 192, 384, 768]
         elif output_stride == 32:
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"0": "0",
                                                                               "1": "1",
@@ -161,7 +166,8 @@ class CspDarkNetL(nn.Module):
             self.stages[-1].apply(dilation2)
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"0": "0",
                                                                               "1": "1",
-                                                                              "3": "2", })
+                                                                              "2": "2",
+                                                                              "3": "3", })
             self.out_channels = [128, 256, 512, 1024]
         elif output_stride == 32:
             self.stages = IntermediateLayerGetter(self.stages, return_layers={"0": "0",
@@ -190,8 +196,9 @@ class EfficientNetV2S(nn.Module):
             self.model[-1].apply(dilation2)
             self.model = IntermediateLayerGetter(self.model, return_layers={"2": "0",
                                                                             "3": "1",
-                                                                            "6": "2", })
-            self.out_channels = [48, 64, 256]
+                                                                            "5": "2",
+                                                                            "6": "3", })
+            self.out_channels = [48, 64, 160, 256]
         elif output_stride == 32:
             self.model = IntermediateLayerGetter(self.model, return_layers={"2": "0",
                                                                             "3": "1",
