@@ -5,8 +5,9 @@ import torch.nn.functional as f
 from collections import OrderedDict
 import torchvision.ops as ops
 
-from models.utils import ConvNormAct, SeparableConv, AuxHead, AttenHead, init_weights
-from models.backbones import configs
+from models.utils import ConvNormAct, SeparableConv, AuxHead, Head, init_weights
+from models.backbones import backbones
+from models.repvgg import RepConvN
 
 
 class ASPPPooling(nn.Module):
@@ -58,11 +59,12 @@ class CatAtten(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, norm_layer: nn.Module = None,
                  act_layer: nn.Module = None) -> None:
         super().__init__()
-        self.conv = ConvNormAct(in_channels, out_channels, kernel_size=3, stride=1,
-                                padding=1, norm_layer=norm_layer, act_layer=act_layer)
-        self.atten = ops.SqueezeExcitation(input_channels=out_channels, squeeze_channels=out_channels // 4,
+        self.conv = RepConvN(in_channels, out_channels, kernel_size=3, stride=1,
+                                padding=1)
+        self.atten = ops.SqueezeExcitation(input_channels=out_channels, squeeze_channels=out_channels // 16,
                                            activation=act_layer, scale_activation=nn.Sigmoid)
         self.apply(init_weights)
+        self.atten.apply(init_weights)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv(x)
@@ -79,22 +81,24 @@ class DeeplabV3PlusDecoder(nn.Module):
                                       norm_layer=norm_layer, act_layer=act_layer)
         self.mid_branch = ConvNormAct(in_channels_list[1], 64, kernel_size=1, stride=1, padding=0,
                                       norm_layer=norm_layer, act_layer=act_layer)
-        self.aspp = ASPP(in_channels_list[-1], dim, dilation_list=dilation_list, conv=SeparableConv,
+        self.aspp = ASPP(in_channels_list[-1], dim, dilation_list=dilation_list, conv=ConvNormAct,
                          norm_layer=norm_layer, act_layer=act_layer)
-        self.cat_atten = CatAtten(256 + 64, 256, norm_layer=norm_layer, act_layer=act_layer)
+        self.cat_atten2 = CatAtten(256 + 64, 256, norm_layer=norm_layer, act_layer=act_layer)
+        self.cat_atten1 = CatAtten(256 + 48, 256, norm_layer=norm_layer, act_layer=act_layer)
 
     def forward(self, x: OrderedDict) -> OrderedDict:
         outs = OrderedDict()
         l = self.low_branch(x["0"])
         m = self.mid_branch(x["1"])
-        outs["edge"] = x["0"]
+        outs["edge"] = l
         outs["aux"] = x["2"]
         x = self.aspp(x["3"])
         x = f.interpolate(x, size=m.shape[2:], mode='bilinear', align_corners=False)
         x = torch.cat([x, m], dim=1)
-        x = self.cat_atten(x)
+        x = self.cat_atten2(x)
         x = f.interpolate(x, size=l.shape[2:], mode='bilinear', align_corners=False)
         x = torch.cat([x, l], dim=1)
+        x = self.cat_atten1(x)
         outs["out"] = x
         return outs
 
@@ -108,11 +112,11 @@ class DeeplabV3Plus(nn.Module):
             raise ValueError("Your Backbone doesn't support dilation.")
         self.decoder = DeeplabV3PlusDecoder(self.backbone.out_channels, dim=dim, dilation_list=[6, 12, 18],
                                             norm_layer=self.backbone.norm, act_layer=self.backbone.act)
-        self.classifier = AttenHead(dim + 48, dim, num_classes, norm_layer=self.backbone.norm,
+        self.classifier = Head(dim, dim, num_classes, norm_layer=self.backbone.norm,
                                     act_layer=self.backbone.act)
-        self.aux = AuxHead(self.backbone.out_channels[-2], self.backbone.out_channels[-2] // 4, num_classes,
+        self.aux = AuxHead(self.backbone.out_channels[-2], self.backbone.out_channels[-2] // 4 , num_classes,
                            norm_layer=self.backbone.norm, act_layer=self.backbone.act)
-        self.edge = AuxHead(self.backbone.out_channels[0], self.backbone.out_channels[0] // 4, 1,
+        self.edge = AuxHead(48, 48 , 1,
                             norm_layer=self.backbone.norm, act_layer=self.backbone.act)
 
     def forward(self, x: torch.Tensor) -> OrderedDict:
@@ -188,6 +192,6 @@ class DeeplabV3Plus(nn.Module):
 
 
 if __name__ == "__main__":
-    m = DeeplabV3Plus(backbone=configs["repvgg"])
+    m = DeeplabV3Plus(backbone=backbones["repvgg"])
     i = torch.randn(2, 3, 768, 1536)
     o = m(i)
