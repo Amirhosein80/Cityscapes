@@ -17,8 +17,8 @@ cityscapes_config = {"train": ["data/cityscapes/leftImg8bit/train", "data/citysc
                      "val": ["data/cityscapes/leftImg8bit/val", "data/cityscapes/gtFine/val"],
                      "test": ["data/cityscapes/leftImg8bit/test", "data/cityscapes/gtFine/test"],
                      "extra_train": ["data/cityscapes/leftImg8bit/train_extra", "data/cityscapes/gtCoarse/train_extra"],
-                     "extra_val": ["data/cityscapes/leftImg8bit/test", "data/cityscapes/gtCoarse/val"],
-                     "num_classes": 19, "ignore_label": 255, "base_size": (1024, 2048), "crop_size": (512, 1024)}
+                     "extra_val": ["data/cityscapes/leftImg8bit/val", "data/cityscapes/gtCoarse/val"],
+                     "num_classes": 19, "ignore_label": 255, "base_size": (1024, 2048), "crop_size": (512, 512)}
 
 cityscapes_classes = {0: {"name": "road", "color": (128, 64, 128)}, 1: {"name": "sidewalk", "color": (244, 35, 232)},
                       2: {"name": "building", "color": (70, 70, 70)}, 3: {"name": "wall", "color": (102, 102, 156)},
@@ -35,22 +35,32 @@ cityscapes_classes = {0: {"name": "road", "color": (128, 64, 128)}, 1: {"name": 
                       18: {"name": "bicycle", "color": (119, 11, 32)}, }
 
 default_train_transform = a.Compose([
-    a.RandomResizedCrop(height=cityscapes_config["base_size"][0], width=cityscapes_config["base_size"][1], scale=(0.75, 2.0)),
+    a.RandomScale(scale_limit=(0.5, 2.0), p=0.8),
+    a.RandomCrop(height=cityscapes_config["base_size"][0], width=cityscapes_config["base_size"][1]),
     a.Resize(height=cityscapes_config["crop_size"][0], width=cityscapes_config["crop_size"][1]),
     a.HorizontalFlip(p=0.5),
     a.Rotate(45, p=0.5),
     a.VerticalFlip(p=0.5),
-    a.ToGray(p=0.5),
-    a.ColorJitter(p=0.5, brightness=0.3, contrast=0.3, hue=0.3, saturation=0.3)
+    a.ColorJitter(p=0.5, brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5)
 
 ])
 default_valid_transform = a.Compose([
-    a.Resize(height=cityscapes_config["crop_size"][0], width=cityscapes_config["crop_size"][1])
 ])
 default_test_transform = a.Compose([
-    a.Resize(height=cityscapes_config["crop_size"][0], width=cityscapes_config["crop_size"][1]),
 ])
 
+default_extra_train_transform = a.Compose([
+    a.Resize(height=416, width=416),
+    a.RandomScale(scale_limit=(0.5, 2.0), p=1.0),
+    a.RandomCrop(height=320, width=320),
+    a.HorizontalFlip(p=0.5),
+    a.VerticalFlip(p=0.5),
+    a.ColorJitter(p=0.5, brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5)
+
+])
+default_extra_valid_transform = a.Compose([
+    a.Resize(height=320, width=320)
+])
 
 class CityScapes(Dataset):
     def __init__(self, phase="train", transform=None, mean=None, std=None):
@@ -67,12 +77,16 @@ class CityScapes(Dataset):
         if transform is not None:
             self.transform = transform
         else:
-            if phase == "train" or phase == "extra_train":
+            if phase == "train" :
                 self.transform = default_train_transform
-            elif phase == "val" or phase == "extra_val":
+            elif phase == "val" :
                 self.transform = default_valid_transform
             elif phase == "test":
                 self.transform = default_test_transform
+            elif phase == "extra_train":
+                self.transform = default_extra_train_transform
+            elif phase == "extra_val":
+                self.transform = default_extra_valid_transform
         self.class_weights = torch.FloatTensor([0.8373, 0.918, 0.866, 1.0345,
                                                 1.0166, 0.9969, 0.9754, 1.0489,
                                                 0.8786, 1.0023, 0.9539, 0.9843,
@@ -166,20 +180,6 @@ class CityScapes(Dataset):
         return image
 
 
-def collater(data):
-    scale = np.random.choice([0.5, 1.0], 1)
-    imgs = [s[0] for s in data]
-    masks = [s[1] for s in data]
-    H, W = cityscapes_config["crop_size"]
-    imgs = [f.resize(i, [int(scale * H), int(scale * W)],
-                     interpolation=f.InterpolationMode.NEAREST) for i in imgs]
-    masks = [
-        f.resize(m.unsqueeze(0), [int(scale * H), int(scale * W)],
-                 interpolation=f.InterpolationMode.NEAREST).squeeze(0) for m in masks]
-    imgs = torch.stack(imgs, dim=0)
-    masks = torch.stack(masks, dim=0)
-    return imgs, masks
-
 
 class CutMix(torch.nn.Module):
     def __init__(self, p: float = 0.5, alpha: float = 1.0):
@@ -216,12 +216,12 @@ class CutMix(torch.nn.Module):
 if __name__ == "__main__":
     ed = Target2Edge()
     ds = CityScapes("train")
-    # ds.show_image(12)
-    # image, mask = ds[10]
-    cu = CutMix(p=1.0)
-    dl = DataLoader(ds, batch_size=3, shuffle=True, num_workers=0, drop_last=True, collate_fn=collater)
-    imgs, tar = next(iter(dl))
-    imgs, tar = cu(imgs, tar)
-    edge = ed(tar)
+    ds.show_image(12)
+    image, mask = ds[10]
+    # cu = CutMix(p=1.0)
+    # dl = DataLoader(ds, batch_size=3, shuffle=True, num_workers=0, drop_last=True, collate_fn=collater)
+    # imgs, tar = next(iter(dl))
+    # imgs, tar = cu(imgs, tar)
+    # edge = ed(tar)
     # print(ds.denormalize(image).max())
     # print(torch.unique(mask))
