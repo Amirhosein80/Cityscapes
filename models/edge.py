@@ -63,7 +63,7 @@ class Target2Edge(nn.Module):
         self.edge.eval()
         with torch.no_grad():
             x = torch.unsqueeze(x, dim=1)
-            return self.edge(x).squeeze(1).long()
+            return self.edge(x).squeeze(1)
 
 
 if __name__ == "__main__":
