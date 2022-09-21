@@ -6,8 +6,9 @@ from collections import OrderedDict
 from torchvision.models._utils import IntermediateLayerGetter
 from torchinfo import summary
 
+from models.repvgg import create_RepVGG_A0
 from models.utils import dilation2, IMAGENET_MEAN, IMAGENET_STD, MOBILENET_MEAN, MOBILENET_STD
-
+from models.fpsparam_calc import fps_calculator
 
 # ==============================================
 #  Dilation Backbones (Support stride 16 or 32)
@@ -102,39 +103,28 @@ class CspDarkNetL(nn.Module):
         return x
 
 
+# ==========================================
+#  Fixed Backbones (Only support stride 32)
+# ==========================================
+
 class RepVGG(nn.Module):
-    def __init__(self, output_stride=32) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        assert output_stride == 32 or output_stride == 16, "Only support stride 16 or 32"
+        self.backbone = create_RepVGG_A0()
 
-        model = timm.create_model("repvgg_b1g4", pretrained=True)
+        self.backbone.load_state_dict(
+            torch.load("F:/Amirhosein/AI/Datasets & Code/Cityscapes/models/RepVGG-A0-train.pth"), strict=False)
 
-        self.stem = model.stem
-        self.stages = model.stages
-
-        del model
-        if output_stride == 16:
-            self.stages[-1].apply(dilation2)
-        self.stages = IntermediateLayerGetter(self.stages, return_layers={"0": "0",
-                                                                          "1": "1",
-                                                                          "2": "2",
-                                                                          "3": "3", })
-        self.out_channels = [128, 256, 512, 2048]
+        self.out_channels = [48, 96, 192, 1280]
 
         self.norm = nn.BatchNorm2d
-        self.act = nn.SiLU
+        self.act = nn.ReLU
         self.mean = IMAGENET_MEAN
         self.std = IMAGENET_STD
 
     def forward(self, x: torch.Tensor):
-        x = self.stem(x)
-        x = self.stages(x)
+        x = self.backbone(x)
         return x
-
-
-# ==========================================
-#  Fixed Backbones (Only support stride 32)
-# ==========================================
 
 class EdgeNext(nn.Module):
     def __init__(self) -> None:
@@ -214,19 +204,20 @@ class MobileVitV2150(nn.Module):
         return x
 
 
-configs = {
+backbones = {
     "mobilenetv3": MobileNetV3,
     "cspdarknetm": CspDarkNetM,
     "cspdarknetl": CspDarkNetL,
-    "repvgg": RepVGG,
     "edgenext": EdgeNext,
     "mobilevitv2150": MobileVitV2150,
     "mobilevitv2200": MobileVitV2200,
+    "repvgg": RepVGG,
 }
 
 if __name__ == "__main__":
-    m = CspDarkNetM(16)
+    m = timm.create_model("tf_efficientnet_b7_ns", pretrained=False)
     i = torch.randn(2, 3, 512, 512)
     o = m(i)
     # print([(k, v.shape) for k, v in o.items()])
     print(summary(m, (2, 3, 512, 512)))
+    print(fps_calculator(m ,[3, 1024, 2048]))
